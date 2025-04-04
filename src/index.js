@@ -4,7 +4,7 @@ import App from './App';
 import axios from 'axios';
 
 // Configure axios defaults
-axios.defaults.baseURL = 'http://localhost:5000';
+axios.defaults.baseURL = 'https://nurachain-backend-9icovg1ej-yuvrajjangirs-projects.vercel.app/';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
