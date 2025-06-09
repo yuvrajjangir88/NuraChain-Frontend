@@ -18,6 +18,11 @@ import {
   alpha,
   Tab,
   Tabs,
+  Alert,
+  List,
+  ListItem,
+  ListItemText,
+  Tooltip,
 } from '@mui/material';
 import {
   LocalShipping,
@@ -34,12 +39,23 @@ import {
   CheckCircle,
   ErrorOutline,
   AccessTime,
+  Factory,
+  VerifiedUser,
+  Store,
+  People,
+  Timeline,
+  Assessment,
+  Speed,
+  BarChart as BarChartIcon,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveLine } from '@nivo/line';
 import { ResponsivePie } from '@nivo/pie';
 import { ResponsiveBar } from '@nivo/bar';
 import axios from 'axios';
+import { useAuth } from '../contexts/AuthContext';
+import { ResponsiveContainer } from '@nivo/line';
+import { CartesianGrid, XAxis, YAxis, Tooltip as NivoTooltip, Legend, Line } from '@nivo/line';
 
 const StyledCard = styled(motion(Card))(({ theme }) => ({
   borderRadius: 16,
@@ -126,79 +142,163 @@ const LineChart = ({ data, isLoading }) => {
     );
   }
 
+  // Ensure data is available and properly formatted
+  if (!data || !Array.isArray(data) || data.length === 0) {
   return (
-    <ResponsiveLine
-      data={[
+      <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Typography variant="body1" color="text.secondary">
+          No activity data available
+        </Typography>
+      </Box>
+    );
+  }
+
+  // Format month labels
+  const formatMonth = (monthStr) => {
+    const [year, month] = monthStr.split('-');
+    return new Date(year, month - 1).toLocaleString('default', { month: 'short', year: '2-digit' });
+  };
+
+  // Prepare data for the chart
+  const chartData = [
         {
           id: 'shipments',
           color: theme.palette.primary.main,
           data: data.map(d => ({
-            x: d.month,
-            y: d.shipments,
-          })),
-        },
-      ]}
-      margin={{ top: 20, right: 20, bottom: 50, left: 50 }}
+        x: formatMonth(d.month),
+        y: d.shipments || 0
+      }))
+    },
+    {
+      id: 'transactions',
+      color: theme.palette.secondary.main,
+      data: data.map(d => ({
+        x: formatMonth(d.month),
+        y: d.transactions || 0
+      }))
+    },
+    {
+      id: 'products',
+      color: theme.palette.success.main,
+      data: data.map(d => ({
+        x: formatMonth(d.month),
+        y: d.products || 0
+      }))
+    }
+  ];
+
+  return (
+    <ResponsiveLine
+      data={chartData}
+      margin={{ top: 20, right: 110, bottom: 50, left: 60 }}
       xScale={{ type: 'point' }}
-      yScale={{ type: 'linear', min: 'auto', max: 'auto', stacked: false }}
-      curve="cardinal"
+      yScale={{ 
+        type: 'linear',
+        min: 0,
+        max: 'auto',
+        stacked: false,
+        reverse: false
+      }}
+      curve="monotoneX"
       axisTop={null}
       axisRight={null}
       axisBottom={{
         tickSize: 5,
         tickPadding: 5,
-        tickRotation: 0,
+        tickRotation: -45,
         legend: 'Month',
-        legendOffset: 36,
+        legendOffset: 45,
         legendPosition: 'middle',
+        format: value => value
       }}
       axisLeft={{
         tickSize: 5,
         tickPadding: 5,
         tickRotation: 0,
-        legend: 'Shipments',
-        legendOffset: -40,
+        legend: 'Count',
+        legendOffset: -45,
         legendPosition: 'middle',
+        format: value => Math.round(value)
       }}
-      colors={theme.palette.primary.main}
-      pointSize={10}
+      pointSize={8}
       pointColor={{ theme: 'background' }}
       pointBorderWidth={2}
       pointBorderColor={{ from: 'serieColor' }}
       pointLabelYOffset={-12}
       useMesh={true}
       enableGridX={false}
+      enableGridY={true}
+      gridYValues={5}
       enableArea={true}
-      areaOpacity={0.2}
+      areaOpacity={0.15}
       enableSlices="x"
       crosshairType="cross"
+      legends={[
+        {
+          anchor: 'bottom-right',
+          direction: 'column',
+          justify: false,
+          translateX: 100,
+          translateY: 0,
+          itemsSpacing: 0,
+          itemDirection: 'left-to-right',
+          itemWidth: 80,
+          itemHeight: 20,
+          itemOpacity: 0.75,
+          symbolSize: 12,
+          symbolShape: 'circle',
+          symbolBorderColor: 'rgba(0, 0, 0, .5)',
+          effects: [
+            {
+              on: 'hover',
+              style: {
+                itemBackground: 'rgba(0, 0, 0, .03)',
+                itemOpacity: 1
+              }
+            }
+          ]
+        }
+      ]}
       theme={{
         axis: {
           ticks: {
             text: {
               fill: theme.palette.text.secondary,
-            },
+              fontSize: 12
+            }
           },
           legend: {
             text: {
               fill: theme.palette.text.primary,
               fontSize: 12,
-            },
-          },
+              fontWeight: 500
+            }
+          }
         },
         grid: {
           line: {
             stroke: theme.palette.divider,
             strokeWidth: 1,
-          },
+            strokeDasharray: '4 4'
+          }
         },
         crosshair: {
           line: {
             stroke: theme.palette.primary.main,
             strokeWidth: 1,
-            strokeOpacity: 0.5,
-          },
+            strokeOpacity: 0.5
+          }
         },
+        tooltip: {
+          container: {
+            background: theme.palette.background.paper,
+            color: theme.palette.text.primary,
+            fontSize: 12,
+            borderRadius: 4,
+            boxShadow: theme.shadows[2],
+            padding: '8px 12px'
+          }
+        }
       }}
     />
   );
@@ -458,357 +558,420 @@ const RecentActivity = ({ activities, isLoading }) => {
   );
 };
 
-export default function Dashboard() {
-  const theme = useTheme();
+const Dashboard = () => {
+  const { user } = useAuth();
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState(0);
+  const [error, setError] = useState(null);
+  const [timeRange, setTimeRange] = useState('month');
+  const theme = useTheme();
 
   useEffect(() => {
-    const fetchMetrics = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
+        const response = await axios.get('/api/metrics/dashboard');
+        console.log('API Response:', response.data);
         
-        // Try to fetch real data from the backend
-        let response;
-        try {
-          response = await axios.get('/api/metrics');
-        } catch (error) {
-          console.warn('Could not fetch real metrics, using mock data instead');
-          // If backend request fails, use mock data
-          const mockMetrics = {
-            totalProducts: 150,
-            activeShipments: 45,
-            completedTransactions: 230,
-            delayedShipments: 8,
-            productTrends: {
-              totalProducts: 12,
-              activeShipments: 8,
-              completedTransactions: -3,
-              delayedShipments: -5,
-            },
-            monthlyStats: [
-              { month: 'Jan', shipments: 65 },
-              { month: 'Feb', shipments: 75 },
-              { month: 'Mar', shipments: 85 },
-              { month: 'Apr', shipments: 95 },
-              { month: 'May', shipments: 80 },
-              { month: 'Jun', shipments: 90 },
-            ],
-            productDistribution: [
-              { id: 'Fasteners', value: 35, color: theme.palette.primary.main },
-              { id: 'Tools', value: 25, color: theme.palette.secondary.main },
-              { id: 'Components', value: 20, color: theme.palette.success.main },
-              { id: 'Hardware', value: 20, color: theme.palette.warning.main },
-            ],
-            categoryStatus: [
-              { 
-                category: 'Fasteners', 
-                completed: 28, 
-                pending: 5, 
-                delayed: 2 
-              },
-              { 
-                category: 'Tools', 
-                completed: 18, 
-                pending: 4, 
-                delayed: 3 
-              },
-              { 
-                category: 'Components', 
-                completed: 15, 
-                pending: 3, 
-                delayed: 2 
-              },
-              { 
-                category: 'Hardware', 
-                completed: 16, 
-                pending: 2, 
-                delayed: 2 
-              },
-            ],
-            recentActivities: [
-              {
-                id: 1,
-                type: 'shipment',
-                message: 'Shipment #SH-2023-06-001 has been delivered',
-                time: '10 minutes ago',
-                status: 'Completed',
-              },
-              {
-                id: 2,
-                type: 'transaction',
-                message: 'New transaction #TX-2023-06-042 has been created',
-                time: '1 hour ago',
-                status: 'Pending',
-              },
-              {
-                id: 3,
-                type: 'product',
-                message: 'Product "M8 Hex Bolt" inventory updated',
-                time: '3 hours ago',
-                status: 'Completed',
-              },
-              {
-                id: 4,
-                type: 'shipment',
-                message: 'Shipment #SH-2023-06-002 is delayed',
-                time: '5 hours ago',
-                status: 'Delayed',
-              },
-            ],
-          };
-          response = { data: mockMetrics };
-        }
+        // Transform data based on user role
+        const transformedData = {
+          ...response.data,
+          monthlyActivity: response.data.monthlyActivity || [],
+          productStatus: response.data.productStatus || [],
+          delayedShipments: response.data.delayedShipments || 0,
+          failedProducts: response.data.failedProducts || 0,
+          efficiency: response.data.efficiency || 0,
+          qualityScore: response.data.qualityScore || 0,
+          supplyChainHealth: response.data.supplyChainHealth || 0,
+        };
         
-        setMetrics(response.data);
-        setLoading(false);
-      } catch (error) {
-        console.error('Error fetching metrics:', error);
+        setMetrics(transformedData);
+      } catch (err) {
+        console.error('Error fetching metrics:', err);
+        setError(err.response?.data?.message || 'Failed to fetch metrics');
+      } finally {
         setLoading(false);
       }
     };
 
-    fetchMetrics();
-    
-    // Refresh data every 5 minutes
-    const intervalId = setInterval(fetchMetrics, 5 * 60 * 1000);
-    
-    return () => clearInterval(intervalId);
-  }, [theme, timeRange]);
+    fetchData();
+  }, [timeRange]);
 
-  const handleTimeRangeChange = (event, newValue) => {
-    setTimeRange(newValue);
+  // Get role-specific metrics
+  const getRoleSpecificMetrics = () => {
+    if (!metrics) return [];
+
+    switch (user.role) {
+      case 'manufacturer':
+        return [
+          {
+            title: "Manufactured Products",
+            value: metrics.totalProducts,
+            icon: <Factory />,
+            color: theme.palette.primary.main,
+            trend: 12
+          },
+          {
+            title: "Quality Score",
+            value: `${metrics.qualityScore}%`,
+            icon: <VerifiedUser />,
+            color: theme.palette.success.main,
+            trend: 5
+          },
+          {
+            title: "Production Efficiency",
+            value: `${metrics.efficiency}%`,
+            icon: <Speed />,
+            color: theme.palette.info.main,
+            trend: -2
+          },
+          {
+            title: "Failed Products",
+            value: metrics.failedProducts,
+            icon: <ErrorOutline />,
+            color: theme.palette.error.main,
+            trend: -8
+          }
+        ];
+      case 'supplier':
+        return [
+              { 
+            title: "Products in Supply",
+            value: metrics.totalProducts,
+            icon: <Store />,
+            color: theme.palette.primary.main,
+            trend: 12
+          },
+          {
+            title: "Supply Chain Health",
+            value: `${metrics.supplyChainHealth}%`,
+            icon: <Timeline />,
+            color: theme.palette.success.main,
+            trend: 5
+              },
+              { 
+            title: "Quality Score",
+            value: `${metrics.qualityScore}%`,
+            icon: <VerifiedUser />,
+            color: theme.palette.info.main,
+            trend: -2
+          },
+          {
+            title: "Delayed Shipments",
+            value: metrics.delayedShipments,
+            icon: <Warning />,
+            color: theme.palette.error.main,
+            trend: -8
+          }
+        ];
+      case 'distributor':
+        return [
+          {
+            title: "Products in Distribution",
+            value: metrics.totalProducts,
+            icon: <LocalShipping />,
+            color: theme.palette.primary.main,
+            trend: 12
+              },
+              { 
+            title: "Distribution Efficiency",
+            value: `${metrics.efficiency}%`,
+            icon: <Speed />,
+            color: theme.palette.success.main,
+            trend: 5
+          },
+          {
+            title: "On-time Delivery",
+            value: `${metrics.qualityScore}%`,
+            icon: <CheckCircle />,
+            color: theme.palette.info.main,
+            trend: -2
+          },
+          {
+            title: "Delayed Deliveries",
+            value: metrics.delayedShipments,
+            icon: <Warning />,
+            color: theme.palette.error.main,
+            trend: -8
+          }
+        ];
+      case 'customer':
+        return [
+          {
+            title: "Delivered Products",
+            value: metrics.totalProducts,
+            icon: <Inventory />,
+            color: theme.palette.primary.main,
+            trend: 12
+          },
+          {
+            title: "Order Satisfaction",
+            value: `${metrics.qualityScore}%`,
+            icon: <VerifiedUser />,
+            color: theme.palette.success.main,
+            trend: 5
+          },
+          {
+            title: "On-time Delivery",
+            value: `${metrics.efficiency}%`,
+            icon: <CheckCircle />,
+            color: theme.palette.info.main,
+            trend: -2
+              },
+              {
+            title: "Delayed Orders",
+            value: metrics.delayedShipments,
+            icon: <Warning />,
+            color: theme.palette.error.main,
+            trend: -8
+          }
+        ];
+      default:
+        return [
+          {
+            title: "Total Products",
+            value: metrics.totalProducts,
+            icon: <Inventory />,
+            color: theme.palette.primary.main,
+            trend: 12
+          },
+          {
+            title: "Supply Chain Health",
+            value: `${metrics.supplyChainHealth}%`,
+            icon: <Timeline />,
+            color: theme.palette.success.main,
+            trend: 5
+          },
+          {
+            title: "Quality Score",
+            value: `${metrics.qualityScore}%`,
+            icon: <VerifiedUser />,
+            color: theme.palette.info.main,
+            trend: -2
+          },
+          {
+            title: "Efficiency Rate",
+            value: `${metrics.efficiency}%`,
+            icon: <Speed />,
+            color: theme.palette.warning.main,
+            trend: 8
+          }
+        ];
+        }
   };
 
-  const timeRanges = ['Today', 'This Week', 'This Month', 'This Year'];
+  // Get role-specific title
+  const getRoleSpecificTitle = () => {
+    switch (user.role) {
+      case 'manufacturer':
+        return 'Manufacturing Analytics';
+      case 'supplier':
+        return 'Supply Chain Analytics';
+      case 'distributor':
+        return 'Distribution Analytics';
+      case 'customer':
+        return 'Order Analytics';
+      default:
+        return 'Supply Chain Analytics';
+    }
+  };
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert severity="error" sx={{ mb: 2 }}>
+        {error}
+      </Alert>
+    );
+  }
+
+  if (!metrics) {
+    return null;
+  }
+
+  const roleMetrics = getRoleSpecificMetrics();
 
   return (
-    <Box sx={{ py: 2 }}>
-      <Box sx={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'space-between',
-        mb: 4 
-      }}>
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <Typography variant="h4" sx={{ fontWeight: 700 }}>
-            Dashboard
+    <Box sx={{ p: 3 }}>
+      {/* Header Section */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Box>
+          <Typography variant="h4" gutterBottom>
+            {getRoleSpecificTitle()}
           </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Welcome back! Here's what's happening with your supply chain today.
+          <Typography variant="body1" color="text.secondary">
+            Real-time insights and performance metrics
           </Typography>
-        </motion.div>
-        
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <Tabs
-            value={timeRange}
-            onChange={handleTimeRangeChange}
-            sx={{ 
-              minHeight: 40,
-              '& .MuiTabs-indicator': {
-                height: 3,
-                borderRadius: 1.5,
-              },
-              '& .MuiTab-root': {
-                minHeight: 40,
-                py: 0,
-                px: 2,
-                minWidth: 'auto',
-              }
-            }}
+        </Box>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={<FilterList />}
+            onClick={() => setTimeRange(timeRange === 'month' ? 'year' : 'month')}
           >
-            {timeRanges.map((range, index) => (
-              <Tab 
-                key={range} 
-                label={range} 
-                value={index}
-                sx={{ 
-                  textTransform: 'none',
-                  fontWeight: 500,
-                  fontSize: '0.875rem',
-                }}
-              />
-            ))}
-          </Tabs>
-          
-          <IconButton sx={{ ml: 1 }}>
-            <FilterList />
-          </IconButton>
+            {timeRange === 'month' ? 'Monthly View' : 'Yearly View'}
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<Refresh />}
+            onClick={() => window.location.reload()}
+          >
+            Refresh Data
+          </Button>
         </Box>
       </Box>
 
+      {/* Key Metrics Grid */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        {roleMetrics.map((metric, index) => (
+          <Grid item xs={12} sm={6} md={3} key={index}>
+            <MetricCard
+              title={metric.title}
+              value={metric.value}
+              icon={metric.icon}
+              color={metric.color}
+              trend={metric.trend}
+              loading={loading}
+            />
+        </Grid>
+        ))}
+        </Grid>
+
+      {/* Main Analytics Section */}
       <Grid container spacing={3}>
-        {/* Metric Cards */}
-        <Grid item xs={12} sm={6} md={3}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            <MetricCard
-              title="Total Products"
-              value={metrics?.totalProducts || 0}
-              icon={<Inventory />}
-              color={theme.palette.primary.main}
-              trend={metrics?.productTrends?.totalProducts}
-              loading={loading}
-            />
-          </motion.div>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <MetricCard
-              title="Active Shipments"
-              value={metrics?.activeShipments || 0}
-              icon={<LocalShipping />}
-              color={theme.palette.secondary.main}
-              trend={metrics?.productTrends?.activeShipments}
-              loading={loading}
-            />
-          </motion.div>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <MetricCard
-              title="Completed Transactions"
-              value={metrics?.completedTransactions || 0}
-              icon={<Receipt />}
-              color={theme.palette.success.main}
-              trend={metrics?.productTrends?.completedTransactions}
-              loading={loading}
-            />
-          </motion.div>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-          >
-            <MetricCard
-              title="Delayed Shipments"
-              value={metrics?.delayedShipments || 0}
-              icon={<Warning />}
-              color={theme.palette.error.main}
-              trend={metrics?.productTrends?.delayedShipments}
-              loading={loading}
-            />
-          </motion.div>
-        </Grid>
-
-        {/* Charts */}
+        {/* Monthly Activity Chart */}
         <Grid item xs={12} md={8}>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.5 }}
-          >
-            <StyledCard sx={{ height: 400 }}>
+          <StyledCard>
               <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                  <Typography variant="h6" fontWeight={600}>
-                    Monthly Shipments
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                <Typography variant="h6">Supply Chain Activity</Typography>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Tooltip title="View detailed analytics">
                     <IconButton size="small">
-                      <CalendarToday fontSize="small" />
+                      <Assessment />
                     </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Export data">
                     <IconButton size="small">
-                      <MoreVert fontSize="small" />
+                      <BarChartIcon />
                     </IconButton>
+                  </Tooltip>
                   </Box>
                 </Box>
-                <Box sx={{ height: 320 }}>
-                  <LineChart data={metrics?.monthlyStats || []} isLoading={loading} />
+              <Box sx={{ height: 400 }}>
+                <LineChart
+                  data={metrics.monthlyActivity}
+                  isLoading={loading}
+                />
                 </Box>
               </CardContent>
             </StyledCard>
-          </motion.div>
         </Grid>
 
+        {/* Product Status Distribution */}
         <Grid item xs={12} md={4}>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.6 }}
-          >
-            <StyledCard sx={{ height: 400 }}>
+          <StyledCard>
               <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                  <Typography variant="h6" fontWeight={600}>
-                    Product Distribution
+              <Typography variant="h6" gutterBottom>
+                Product Status Distribution
                   </Typography>
-                  <IconButton size="small">
-                    <MoreVert fontSize="small" />
-                  </IconButton>
-                </Box>
-                <Box sx={{ height: 320 }}>
-                  <PieChart data={metrics?.productDistribution || []} isLoading={loading} />
+              <Box sx={{ height: 400 }}>
+                <PieChart
+                  data={metrics.productStatus.map(status => ({
+                    id: status._id,
+                    label: status._id,
+                    value: status.count,
+                    color: theme.palette[status._id === 'active' ? 'success' : 
+                                       status._id === 'pending' ? 'warning' : 
+                                       'error'].main
+                  }))}
+                  isLoading={loading}
+                />
                 </Box>
               </CardContent>
             </StyledCard>
-          </motion.div>
         </Grid>
 
-        <Grid item xs={12} md={8}>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.7 }}
-          >
-            <StyledCard sx={{ height: 400 }}>
+        {/* Issues and Performance */}
+        <Grid item xs={12} md={6}>
+          <StyledCard>
               <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                  <Typography variant="h6" fontWeight={600}>
-                    Category Status
+              <Typography variant="h6" gutterBottom>
+                Supply Chain Issues
                   </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <IconButton size="small">
-                      <FilterList fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small">
-                      <MoreVert fontSize="small" />
-                    </IconButton>
+              <Grid container spacing={2}>
+                <Grid item xs={6}>
+                  <Box sx={{ textAlign: 'center', p: 2 }}>
+                    <Typography variant="h3" color="error" gutterBottom>
+                      {metrics.delayedShipments}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Delayed Shipments
+                  </Typography>
+                    <Chip
+                      icon={<Warning />}
+                      label="Needs Attention"
+                      color="error"
+                      size="small"
+                      sx={{ mt: 1 }}
+                    />
                   </Box>
+                </Grid>
+                <Grid item xs={6}>
+                  <Box sx={{ textAlign: 'center', p: 2 }}>
+                    <Typography variant="h3" color="error" gutterBottom>
+                      {metrics.failedProducts}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Failed Products
+                    </Typography>
+                    <Chip
+                      icon={<ErrorOutline />}
+                      label="Critical"
+                      color="error"
+                      size="small"
+                      sx={{ mt: 1 }}
+                    />
                 </Box>
-                <Box sx={{ height: 320 }}>
-                  <BarChart data={metrics?.categoryStatus || []} isLoading={loading} />
-                </Box>
+                </Grid>
+              </Grid>
               </CardContent>
             </StyledCard>
-          </motion.div>
         </Grid>
 
-        <Grid item xs={12} md={4}>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.8 }}
-          >
-            <StyledCard sx={{ height: 400, overflow: 'auto' }}>
+        {/* Recent Activity */}
+        <Grid item xs={12} md={6}>
+          <StyledCard>
               <CardContent>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6">Recent Activity</Typography>
+                <IconButton size="small">
+                  <MoreVert />
+                </IconButton>
+              </Box>
                 <RecentActivity 
-                  activities={metrics?.recentActivities || []} 
+                activities={metrics.recentTransactions.map(tx => ({
+                  id: tx._id,
+                  type: 'transaction',
+                  message: `${tx.fromUser.username} transferred ${tx.product.name}`,
+                  time: new Date(tx.createdAt).toLocaleString(),
+                  status: tx.status
+                }))}
                   isLoading={loading} 
                 />
               </CardContent>
             </StyledCard>
-          </motion.div>
         </Grid>
       </Grid>
     </Box>
   );
-}
+};
+
+export default Dashboard;

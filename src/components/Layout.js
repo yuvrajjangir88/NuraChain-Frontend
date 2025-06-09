@@ -64,11 +64,19 @@ const adminMenuItems = [
   { text: 'Analytics', icon: <BarChart />, path: '/admin/analytics' },
 ];
 
-// Product management items (for suppliers and admins)
-const productMenuItems = [
-  { text: 'My Products', icon: <Inventory />, path: '/products' },
-  { text: 'Add Product', icon: <Add />, path: '/products/add' },
-];
+// Product management items based on role
+const getProductMenuItems = (role) => {
+  const items = [
+    { text: 'My Products', icon: <Inventory />, path: '/products' }
+  ];
+  
+  // Show Add Product for admins and manufacturers
+  if (role === 'admin' || role === 'manufacturer') {
+    items.push({ text: 'Add Product', icon: <Add />, path: '/products/add' });
+  }
+  
+  return items;
+};
 
 export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -95,8 +103,11 @@ export default function Layout() {
     navigate('/login');
   };
 
-  // Check if user can manage products (supplier or admin)
-  const canManageProducts = user && (user.role === 'supplier' || user.role === 'admin' || user.role === 'manufacturer');
+  // Check if user can manage products (supplier, distributor, customer or admin)
+  const canManageProducts = user && (user.role === 'supplier' || user.role === 'admin' || user.role === 'manufacturer' || user.role === 'distributor' || user.role === 'customer');
+
+  // Get product menu items based on user role
+  const productMenuItems = user ? getProductMenuItems(user.role) : [];
 
   // Animation variants
   const listItemVariants = {
@@ -237,7 +248,7 @@ export default function Layout() {
           </List>
         </motion.div>
         
-        {/* Product management section - only shown to suppliers and admins */}
+        {/* Product management section - only shown to suppliers, distributors, and admins */}
         {canManageProducts && (
           <motion.div
             variants={sectionVariants}
@@ -254,7 +265,10 @@ export default function Layout() {
                   letterSpacing: 1,
                 }}
               >
-                Product Management
+                {user.role === 'distributor' ? 'Distribution Management' :
+                 user.role === 'supplier' ? 'Supply Management' :
+                 user.role === 'customer' ? 'My Products' :
+                 'Product Management'}
               </Typography>
               <List sx={{ mt: 1 }}>
                 {productMenuItems.map((item, index) => {
@@ -480,38 +494,6 @@ export default function Layout() {
           </Box>
           
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Tooltip title="Search">
-              <IconButton 
-                color="inherit" 
-                sx={{ 
-                  mr: 1,
-                  transition: 'all 0.2s',
-                  '&:hover': {
-                    transform: 'scale(1.1)',
-                  },
-                }}
-              >
-                <Search />
-              </IconButton>
-            </Tooltip>
-            
-            <Tooltip title="Notifications">
-              <IconButton 
-                color="inherit" 
-                sx={{ 
-                  mr: 2,
-                  transition: 'all 0.2s',
-                  '&:hover': {
-                    transform: 'scale(1.1)',
-                  },
-                }}
-              >
-                <Badge badgeContent={4} color="error">
-                  <Notifications />
-                </Badge>
-              </IconButton>
-            </Tooltip>
-            
             {user && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}

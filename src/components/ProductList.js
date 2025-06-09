@@ -25,6 +25,7 @@ import {
   TableHead,
   TableRow,
   Paper,
+  Pagination,
 } from '@mui/material';
 import {
   Search,
@@ -134,20 +135,21 @@ const ProductList = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const limit = 100; // Show 100 products per page
 
   useEffect(() => {
     const fetchProducts = async () => {
       try {
         setLoading(true);
-        const response = await axios.get('/api/products');
+        const response = await axios.get(`/api/products?page=${page}&limit=${limit}`);
         console.log('API Response:', response.data); // Debug log
         
-        // Handle both array and paginated response formats
-        const productsData = Array.isArray(response.data) 
-          ? response.data 
-          : (response.data.products || []);
-        
-        setProducts(productsData);
+        setProducts(response.data.products || []);
+        setTotalProducts(response.data.pagination.total);
+        setTotalPages(response.data.pagination.pages);
       } catch (err) {
         console.error('Error fetching products:', err);
         setError(err.response?.data?.message || 'Failed to fetch products');
@@ -158,7 +160,11 @@ const ProductList = () => {
     };
 
     fetchProducts();
-  }, []);
+  }, [page]);
+
+  const handlePageChange = (event, value) => {
+    setPage(value);
+  };
 
   if (loading) {
     return (
@@ -187,6 +193,7 @@ const ProductList = () => {
   }
 
   return (
+    <Box>
     <Grid container spacing={3}>
       {products.map((product) => (
         <Grid item xs={12} sm={6} md={4} key={product._id || product.id}>
@@ -194,6 +201,20 @@ const ProductList = () => {
         </Grid>
       ))}
     </Grid>
+      
+      {totalPages > 1 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+          <Pagination
+            count={totalPages}
+            page={page}
+            onChange={handlePageChange}
+            color="primary"
+            showFirstButton
+            showLastButton
+          />
+        </Box>
+      )}
+    </Box>
   );
 };
 

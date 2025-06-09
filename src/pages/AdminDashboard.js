@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { styled } from '@mui/material/styles';
+import { styled, useTheme } from '@mui/material/styles';
 import {
   Box,
   Container,
@@ -51,6 +51,7 @@ import { ResponsivePie } from '@nivo/pie';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { motion } from 'framer-motion';
+import { alpha } from '@mui/material/styles';
 
 const StyledCard = styled(Card)(({ theme }) => ({
   borderRadius: 16,
@@ -98,16 +99,22 @@ const TabPanel = ({ children, value, index }) => (
 );
 
 export default function AdminDashboard() {
+  const theme = useTheme();
   const [users, setUsers] = useState([]);
   const [metrics, setMetrics] = useState({
+    dashboard: {
+      totalProducts: 0,
     totalUsers: 0,
-    totalProducts: 0,
     totalTransactions: 0,
-    pendingVerifications: 0,
-    revenueData: [],
-    productCategories: [],
-    shipmentStatus: [],
-    userRoles: []
+      totalShipments: 0,
+      recentTransactions: [],
+      productDistribution: [],
+      shipmentStatus: {
+        pending: 0,
+        delivered: 0,
+        delayed: 0
+      }
+    }
   });
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedTab, setSelectedTab] = useState(0);
@@ -147,23 +154,55 @@ export default function AdminDashboard() {
     try {
       const [usersRes, metricsRes] = await Promise.all([
         axios.get('/api/auth/users'),
-        axios.get('/api/metrics')
+        axios.get('/api/metrics/dashboard')
       ]);
       
       setUsers(usersRes.data || []);
-      setMetrics(metricsRes.data || {
-        totalUsers: 0,
-        totalProducts: 0,
-        totalTransactions: 0,
-        pendingVerifications: 0,
-        revenueData: [],
-        productCategories: [],
-        shipmentStatus: [],
-        userRoles: []
+      
+      // Transform the metrics data to match our frontend structure
+      const metricsData = metricsRes.data || {};
+      setMetrics({
+        dashboard: {
+          totalProducts: metricsData.totalProducts || 0,
+          totalUsers: metricsData.totalUsers || 0,
+          totalTransactions: metricsData.totalTransactions || 0,
+          totalShipments: metricsData.totalShipments || 0,
+          recentTransactions: metricsData.recentTransactions?.map(t => ({
+            date: new Date(t.createdAt).toLocaleDateString(),
+            value: t.totalAmount || 0
+          })) || [],
+          productDistribution: metricsData.productDistribution?.map(p => ({
+            id: p.category,
+            label: p.category,
+            value: p.count,
+            color: p.color
+          })) || [],
+          shipmentStatus: {
+            pending: metricsData.shipmentStatus?.pending || 0,
+            delivered: metricsData.shipmentStatus?.delivered || 0,
+            delayed: metricsData.shipmentStatus?.delayed || 0
+          }
+        }
       });
     } catch (error) {
-      setError('Failed to fetch dashboard data');
       console.error('Error fetching data:', error);
+      setError('Failed to fetch dashboard data');
+      // Set default metrics on error
+      setMetrics({
+        dashboard: {
+          totalProducts: 0,
+          totalUsers: 0,
+          totalTransactions: 0,
+          totalShipments: 0,
+          recentTransactions: [],
+          productDistribution: [],
+          shipmentStatus: {
+            pending: 0,
+            delivered: 0,
+            delayed: 0
+          }
+        }
+      });
     } finally {
       setLoading(false);
     }
@@ -257,7 +296,7 @@ export default function AdminDashboard() {
         <Grid item xs={12} sm={6} md={3}>
           <MetricCard
             title="Total Users"
-            value={metrics.totalUsers}
+            value={metrics?.dashboard?.totalUsers || 0}
             icon={<People />}
             color="#2196f3"
           />
@@ -265,7 +304,7 @@ export default function AdminDashboard() {
         <Grid item xs={12} sm={6} md={3}>
           <MetricCard
             title="Total Products"
-            value={metrics.totalProducts}
+            value={metrics?.dashboard?.totalProducts || 0}
             icon={<Inventory />}
             color="#4caf50"
           />
@@ -273,17 +312,17 @@ export default function AdminDashboard() {
         <Grid item xs={12} sm={6} md={3}>
           <MetricCard
             title="Total Transactions"
-            value={metrics.totalTransactions}
+            value={metrics?.dashboard?.totalTransactions || 0}
             icon={<LocalShipping />}
             color="#ff9800"
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <MetricCard
-            title="Pending Verifications"
-            value={metrics.pendingVerifications}
-            icon={<Warning />}
-            color="#f44336"
+            title="Total Shipments"
+            value={metrics?.dashboard?.totalShipments || 0}
+            icon={<LocalShipping />}
+            color="#ff9800"
           />
         </Grid>
 
@@ -292,18 +331,23 @@ export default function AdminDashboard() {
           <StyledCard>
             <CardContent>
               <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-                <Typography variant="h6">Revenue Trends</Typography>
-                <IconButton onClick={fetchData}>
-                  <Refresh />
+                <Typography variant="h6" fontWeight={600}>Transaction Trends</Typography>
+                <Box display="flex" gap={1}>
+                  <IconButton size="small" onClick={fetchData}>
+                    <Refresh fontSize="small" />
+                  </IconButton>
+                  <IconButton size="small">
+                    <MoreVert fontSize="small" />
                 </IconButton>
+                </Box>
               </Box>
               <Box height={400}>
                 <ResponsiveLine
                   data={[
                     {
-                      id: 'revenue',
-                      data: metrics.revenueData.map(item => ({
-                        x: item.month,
+                      id: 'transactions',
+                      data: metrics?.dashboard?.recentTransactions?.map(item => ({
+                        x: item.date,
                         y: item.value
                       })) || []
                     }
@@ -317,13 +361,19 @@ export default function AdminDashboard() {
                   axisBottom={{
                     tickSize: 5,
                     tickPadding: 5,
-                    tickRotation: 0
+                    tickRotation: -45,
+                    legend: 'Date',
+                    legendOffset: 45,
+                    legendPosition: 'middle'
                   }}
                   axisLeft={{
                     tickSize: 5,
                     tickPadding: 5,
                     tickRotation: 0,
-                    format: value => `$${value / 1000}k`
+                    legend: 'Amount',
+                    legendOffset: -45,
+                    legendPosition: 'middle',
+                    format: value => `$${value.toLocaleString()}`
                   }}
                   pointSize={10}
                   pointColor={{ theme: 'background' }}
@@ -333,6 +383,25 @@ export default function AdminDashboard() {
                   useMesh={true}
                   enableArea={true}
                   areaOpacity={0.1}
+                  theme={{
+                    axis: {
+                      ticks: {
+                        text: {
+                          fill: theme.palette.text.secondary
+                        }
+                      },
+                      legend: {
+                        text: {
+                          fill: theme.palette.text.primary
+                        }
+                      }
+                    },
+                    grid: {
+                      line: {
+                        stroke: theme.palette.divider
+                      }
+                    }
+                  }}
                 />
               </Box>
             </CardContent>
@@ -342,32 +411,114 @@ export default function AdminDashboard() {
         <Grid item xs={12} md={4}>
           <StyledCard>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                User Distribution
-              </Typography>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+                <Typography variant="h6" fontWeight={600}>Product Distribution</Typography>
+                <IconButton size="small">
+                  <MoreVert fontSize="small" />
+                </IconButton>
+              </Box>
               <Box height={300}>
                 <ResponsivePie
-                  data={metrics.userRoles.map(item => ({
-                    id: item.role,
-                    label: item.role,
-                    value: item.count
-                  })) || []}
+                  data={metrics?.dashboard?.productDistribution || []}
                   margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
                   innerRadius={0.6}
                   padAngle={0.7}
                   cornerRadius={3}
-                  colors={{ scheme: 'nivo' }}
+                  colors={{ datum: 'data.color' }}
                   borderWidth={1}
                   borderColor={{ from: 'color', modifiers: [['darker', 0.2]] }}
                   enableArcLinkLabels={true}
                   arcLinkLabelsSkipAngle={10}
-                  arcLinkLabelsTextColor="#333333"
+                  arcLinkLabelsTextColor={theme.palette.text.secondary}
                   arcLinkLabelsThickness={2}
                   arcLinkLabelsColor={{ from: 'color' }}
                   arcLabelsSkipAngle={10}
                   arcLabelsTextColor="#ffffff"
+                  legends={[
+                    {
+                      anchor: 'bottom',
+                      direction: 'row',
+                      justify: false,
+                      translateX: 0,
+                      translateY: 50,
+                      itemsSpacing: 0,
+                      itemWidth: 100,
+                      itemHeight: 20,
+                      itemTextColor: theme.palette.text.secondary,
+                      itemDirection: 'left-to-right',
+                      itemOpacity: 1,
+                      symbolSize: 12,
+                      symbolShape: 'circle'
+                    }
+                  ]}
                 />
               </Box>
+            </CardContent>
+          </StyledCard>
+        </Grid>
+
+        {/* Shipment Status */}
+        <Grid item xs={12}>
+          <StyledCard>
+            <CardContent>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+                <Typography variant="h6" fontWeight={600}>Shipment Status Overview</Typography>
+                <Box display="flex" gap={1}>
+                  <IconButton size="small" onClick={fetchData}>
+                    <Refresh fontSize="small" />
+                  </IconButton>
+                  <IconButton size="small">
+                    <MoreVert fontSize="small" />
+                  </IconButton>
+                </Box>
+              </Box>
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={4}>
+                  <Box
+                    sx={{
+                      p: 3,
+                      borderRadius: 2,
+                      bgcolor: 'warning.light',
+                      color: 'warning.contrastText'
+                    }}
+                  >
+                    <Typography variant="h4" fontWeight={600}>
+                      {metrics?.dashboard?.shipmentStatus?.pending || 0}
+                    </Typography>
+                    <Typography variant="subtitle1">Pending Shipments</Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Box
+                    sx={{
+                      p: 3,
+                      borderRadius: 2,
+                      bgcolor: 'success.light',
+                      color: 'success.contrastText'
+                    }}
+                  >
+                    <Typography variant="h4" fontWeight={600}>
+                      {metrics?.dashboard?.shipmentStatus?.delivered || 0}
+                    </Typography>
+                    <Typography variant="subtitle1">Delivered Shipments</Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Box
+                    sx={{
+                      p: 3,
+                      borderRadius: 2,
+                      bgcolor: 'error.light',
+                      color: 'error.contrastText'
+                    }}
+                  >
+                    <Typography variant="h4" fontWeight={600}>
+                      {metrics?.dashboard?.shipmentStatus?.delayed || 0}
+                    </Typography>
+                    <Typography variant="subtitle1">Delayed Shipments</Typography>
+                  </Box>
+                </Grid>
+              </Grid>
             </CardContent>
           </StyledCard>
         </Grid>
@@ -478,14 +629,17 @@ export default function AdminDashboard() {
                           {user.company ? (
                             <Box>
                               <Typography variant="subtitle2">
-                                {user.company.name}
+                                {user.company.name || 'N/A'}
                               </Typography>
                               <Typography variant="body2" color="textSecondary">
-                                {`${user.company.address.city}, ${user.company.address.country}`}
+                                {user.company.address ? 
+                                  `${user.company.address.city || ''}, ${user.company.address.country || ''}` :
+                                  'No address'
+                                }
                               </Typography>
                             </Box>
                           ) : (
-                            'N/A'
+                            <Typography variant="body2" color="textSecondary">N/A</Typography>
                           )}
                         </TableCell>
                         <TableCell>
